@@ -17,6 +17,7 @@ export default function Topbar({ onMenuClick, pageTitle }) {
   const [showNotif, setShowNotif] = useState(false);
 
   const roleColors = {
+    SuperAdmin: 'bg-violet-600',
     MD: 'bg-purple-600',
     Admin: 'bg-slate-600',
     ProcurementManager: 'bg-orange-500',
@@ -85,7 +86,7 @@ export default function Topbar({ onMenuClick, pageTitle }) {
               </div>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-semibold text-slate-700 leading-tight">{currentUser.name}</p>
-                <p className="text-xs text-slate-400">{currentUser.role}</p>
+                <p className="text-xs text-slate-400">{(currentUser.roles || [currentUser.role]).join(', ')}</p>
               </div>
               <ChevronDown size={14} className="text-slate-400 hidden sm:block" />
             </button>
@@ -93,7 +94,7 @@ export default function Topbar({ onMenuClick, pageTitle }) {
               <div className="absolute right-0 top-12 w-52 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100">
                   <p className="text-sm font-semibold text-slate-700">{currentUser.name}</p>
-                  <p className="text-xs text-slate-400">{currentUser.role} · {currentUser.siteId}</p>
+                  <p className="text-xs text-slate-400">{(currentUser.roles || [currentUser.role]).join(', ')} · {currentUser.siteId}</p>
                 </div>
                 <button
                   onClick={logout}

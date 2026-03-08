@@ -3,19 +3,20 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Package, ClipboardList, CalendarCheck,
   ArrowLeftRight, Wrench, AlertTriangle, HardHat, ChevronRight,
-  X
+  X, Shield
 } from 'lucide-react';
 import { useAuth, ROLE_PERMISSIONS } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 
 const ALL_NAV = [
-  { to: '/',           label: 'Dashboard',     icon: LayoutDashboard, module: 'dashboard' },
-  { to: '/inventory',  label: 'Inventory',     icon: Package,         module: 'inventory' },
-  { to: '/requisitions', label: 'Requisitions', icon: ClipboardList,  module: 'requisitions' },
-  { to: '/booking',    label: 'Daily Booking', icon: CalendarCheck,   module: 'booking' },
-  { to: '/borrow',     label: 'Inter-Site Borrow', icon: ArrowLeftRight, module: 'borrow' },
-  { to: '/repairs',    label: 'Repairs',       icon: Wrench,          module: 'repairs' },
-  { to: '/writeoff',   label: 'Write-off',     icon: AlertTriangle,   module: 'writeoff' },
+  { to: '/',             label: 'Dashboard',         icon: LayoutDashboard, module: 'dashboard' },
+  { to: '/inventory',    label: 'Inventory',         icon: Package,         module: 'inventory' },
+  { to: '/requisitions', label: 'Requisitions',      icon: ClipboardList,   module: 'requisitions' },
+  { to: '/booking',      label: 'Daily Booking',     icon: CalendarCheck,   module: 'booking' },
+  { to: '/borrow',       label: 'Inter-Site Borrow', icon: ArrowLeftRight,  module: 'borrow' },
+  { to: '/repairs',      label: 'Repairs',           icon: Wrench,          module: 'repairs' },
+  { to: '/writeoff',     label: 'Write-off',         icon: AlertTriangle,   module: 'writeoff' },
+  { to: '/admin',        label: 'Admin Panel',       icon: Shield,          module: 'admin' },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -35,6 +36,7 @@ export default function Sidebar({ open, onClose }) {
   const navItems = ALL_NAV.filter(n => hasPermission(n.module));
 
   const roleColors = {
+    SuperAdmin: 'bg-violet-100 text-violet-700',
     MD: 'bg-purple-100 text-purple-700',
     Admin: 'bg-slate-200 text-slate-700',
     ProcurementManager: 'bg-orange-100 text-orange-700',
@@ -87,7 +89,7 @@ export default function Sidebar({ open, onClose }) {
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{currentUser.name}</p>
                 <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-medium', roleColors[currentUser.role] || 'bg-slate-700 text-slate-300')}>
-                  {currentUser.role}
+                  {(currentUser.roles || [currentUser.role]).join(' · ')}
                 </span>
               </div>
             </div>
