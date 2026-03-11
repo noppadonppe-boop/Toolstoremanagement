@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth, ROLES } from '../context/AuthContext';
-import { Shield, Check, X, Clock, Users, RefreshCw, ChevronDown } from 'lucide-react';
+import { deleteUserProfile } from '../services/authService';
+import { Shield, Check, X, Clock, Users, RefreshCw, ChevronDown, Trash2, Activity, List } from 'lucide-react';
 import { clsx } from 'clsx';
 
-const COLL = 'CMG-Tool-Store-Management';
+const COLL = 'CMG Tool Store Management';
 const ROOT = 'root';
 const usersCol = () => collection(db, COLL, ROOT, 'users');
 const userDocRef = (uid) => doc(db, COLL, ROOT, 'users', uid);
+const activityCol = () => collection(db, COLL, ROOT, 'activityLogs');
 
 const STATUS_BADGE = {
   pending:  'bg-amber-100 text-amber-700',
@@ -17,18 +19,30 @@ const STATUS_BADGE = {
 };
 const STATUS_LABEL = { pending: 'รอการอนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธ' };
 
+const ACTIVITY_LABEL = { LOGIN: 'เข้าสู่ระบบ', REGISTER: 'สมัครสมาชิก' };
+
 export default function AdminPanel() {
   const { userProfile } = useAuth();
-  const [users,     setUsers]     = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [filter,    setFilter]    = useState('all'); // all | pending | approved | rejected
+  const [users,       setUsers]       = useState([]);
+  const [activities,  setActivities] = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [filter,      setFilter]      = useState('all'); // all | pending | approved | rejected
   const [editingRoles, setEditingRoles] = useState({}); // uid → boolean (dropdown open)
-  const [saving,    setSaving]    = useState({});
+  const [saving,      setSaving]      = useState({});
+  const [activeTab,   setActiveTab]   = useState('users'); // 'users' | 'activity'
 
   useEffect(() => {
     const unsub = onSnapshot(usersCol(), (snap) => {
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const q = query(activityCol(), orderBy('timestamp', 'desc'), limit(200));
+    const unsub = onSnapshot(q, (snap) => {
+      setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
   }, []);
@@ -52,6 +66,17 @@ export default function AdminPanel() {
       await updateDoc(userDocRef(uid), { role: next });
     } finally {
       setSaving(s => ({ ...s, [uid]: false }));
+    }
+  };
+
+  const deleteUser = async (u) => {
+    const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || 'ผู้ใช้นี้';
+    if (!window.confirm(`ต้องการลบผู้ใช้ "${name}" ออกจากระบบใช่หรือไม่? ผู้ใช้จะไม่สามารถเข้าใช้งานได้อีก (บัญชีจะถูกลบจากรายการเท่านั้น)`)) return;
+    setSaving(s => ({ ...s, [u.uid]: true }));
+    try {
+      await deleteUserProfile(u.uid);
+    } finally {
+      setSaving(s => ({ ...s, [u.uid]: false }));
     }
   };
 
@@ -81,10 +106,90 @@ export default function AdminPanel() {
         </div>
         <div>
           <h2 className="text-xl font-bold text-slate-800">Admin Panel</h2>
-          <p className="text-slate-500 text-sm">จัดการผู้ใช้งานและสิทธิ์การเข้าถึง</p>
+          <p className="text-slate-500 text-sm">จัดการผู้ใช้งานและบันทึกกิจกรรม</p>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('users')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px',
+            activeTab === 'users'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          )}
+        >
+          <Users size={18} /> จัดการผู้ใช้
+        </button>
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px',
+            activeTab === 'activity'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          )}
+        >
+          <Activity size={18} /> Activity log
+        </button>
+      </div>
+
+      {activeTab === 'activity' ? (
+        /* Activity Log */
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <List size={18} className="text-slate-500" />
+            <span className="font-medium text-slate-700">บันทึกการเข้าสู่ระบบและสมัครสมาชิก (ล่าสุด 200 รายการ)</span>
+          </div>
+          {activities.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <Activity size={32} className="mb-3 opacity-40" />
+              <p className="text-sm">ยังไม่มีบันทึกกิจกรรม</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">วันเวลา</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">การกระทำ</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">อีเมล</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">User ID</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">วิธี / รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {activities.map((a) => {
+                    const ts = a.timestamp?.toDate?.() ?? (a.timestamp?.seconds != null ? new Date(a.timestamp.seconds * 1000) : null);
+                    const timeStr = ts ? ts.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+                    const method = a.method ? (a.method === 'google' ? 'Google' : a.method === 'email' ? 'อีเมล' : a.method) : '—';
+                    const extra = a.isFirstUser ? ' (ผู้ใช้แรก)' : '';
+                    return (
+                      <tr key={a.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{timeStr}</td>
+                        <td className="px-5 py-3">
+                          <span className={clsx(
+                            'text-xs px-2.5 py-1 rounded-full font-medium',
+                            a.action === 'LOGIN' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                          )}>
+                            {ACTIVITY_LABEL[a.action] ?? a.action}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-700">{a.email || '—'}</td>
+                        <td className="px-5 py-3 text-slate-500 font-mono text-xs">{a.userId || '—'}</td>
+                        <td className="px-5 py-3 text-slate-600">{method}{extra}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -231,6 +336,14 @@ export default function AdminPanel() {
                                 <X size={12} /> ปฏิเสธ
                               </button>
                             )}
+                            <button
+                              onClick={() => deleteUser(u)}
+                              disabled={isSaving}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                              title="ลบผู้ใช้"
+                            >
+                              <Trash2 size={12} /> ลบ
+                            </button>
                             {isSaving && <RefreshCw size={14} className="text-slate-400 animate-spin" />}
                           </div>
                         )}
@@ -243,6 +356,8 @@ export default function AdminPanel() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

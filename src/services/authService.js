@@ -11,7 +11,7 @@ import {
 import { auth, db, googleProvider } from '../firebase';
 import { setSessionExpiry, clearSession } from './sessionService';
 
-const COLL = 'CMG-Tool-Store-Management';
+const COLL = 'CMG Tool Store Management';
 const ROOT = 'root';
 
 const userDocRef  = (uid) => doc(db, COLL, ROOT, 'users', uid);
@@ -24,7 +24,7 @@ export async function fetchUserProfile(uid) {
   return snap.exists() ? snap.data() : null;
 }
 
-async function createUserProfile(uid, email, firstName, lastName, position) {
+async function createUserProfile(uid, email, firstName, lastName, position, photoURL = null) {
   return runTransaction(db, async (tx) => {
     const metaSnap   = await tx.get(appMetaRef());
     const isFirstUser = !metaSnap.exists() || !metaSnap.data().firstUserRegistered;
@@ -39,7 +39,7 @@ async function createUserProfile(uid, email, firstName, lastName, position) {
       status: isFirstUser ? 'approved'    : 'pending',
       assignedProjects: [],
       createdAt: serverTimestamp(),
-      photoURL: null,
+      photoURL: photoURL || null,
       isFirstUser,
     };
 
@@ -83,6 +83,8 @@ export async function loginWithGoogle() {
   // Set expiry IMMEDIATELY after sign-in to avoid race condition with onAuthStateChanged
   setSessionExpiry();
 
+  // Refresh token before Firestore reads to avoid first-click race
+  await cred.user.getIdToken(true);
   const existing = await fetchUserProfile(cred.user.uid);
 
   if (existing) {
@@ -90,11 +92,12 @@ export async function loginWithGoogle() {
     return existing;
   }
 
-  // New Google user — create profile
+  // New Google user — create profile (เก็บรูปจาก Google)
   const parts   = (cred.user.displayName || '').split(' ');
   const profile = await createUserProfile(
     cred.user.uid, cred.user.email,
     parts[0] || '', parts.slice(1).join(' ') || '', '',
+    cred.user.photoURL || null,
   );
 
   logActivity('REGISTER', cred.user.uid, cred.user.email, { method: 'google', isFirstUser: profile.isFirstUser });
@@ -116,4 +119,15 @@ export async function registerWithEmail(email, password, firstName, lastName, po
 export async function logout() {
   clearSession();
   await signOut(auth);
+}
+
+/** ลบโปรไฟล์ผู้ใช้จาก Firestore (สำหรับ Admin/SuperAdmin) — บัญชี Firebase Auth ยังอยู่ */
+export async function deleteUserProfile(uid) {
+  await runTransaction(db, async (tx) => {
+    tx.delete(userDocRef(uid));
+    const metaSnap = await tx.get(appMetaRef());
+    if (metaSnap.exists() && typeof metaSnap.data().totalUsers === 'number' && metaSnap.data().totalUsers > 0) {
+      tx.update(appMetaRef(), { totalUsers: increment(-1) });
+    }
+  });
 }

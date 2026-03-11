@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal';
 import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import Input, { Select, Textarea } from '../components/ui/Input';
 import EmptyState from '../components/ui/EmptyState';
+import { uniqueId } from '../utils/ids';
 
 const KANBAN_COLS = [
   { key: 'Pending',     label: 'Pending',     color: 'border-t-amber-400',   bg: 'bg-amber-50' },
@@ -16,17 +17,17 @@ const KANBAN_COLS = [
 ];
 
 export default function RepairsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { repairs, tools, sites, addRepair, updateRepair, completeRepair } = useApp();
   const [view, setView] = useState('kanban');
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState(null);
   const [completeModal, setCompleteModal] = useState(null);
 
-  const canManage = ['StoreSite', 'StoreMain', 'Admin', 'MD'].includes(currentUser.role);
+  const canManage = hasAnyRole(['StoreSite', 'StoreMain', 'Admin', 'MD']);
 
   const visibleRepairs = repairs.filter(r =>
-    ['Admin', 'MD', 'StoreMain', 'ProcurementManager'].includes(currentUser.role) ||
+    hasAnyRole(['Admin', 'MD', 'StoreMain', 'ProcurementManager']) ||
     r.responsibleSiteId === currentUser.siteId || r.ownerSiteId === currentUser.siteId
   );
 
@@ -262,31 +263,44 @@ function RepairDetailModal({ repair, sites }) {
 function CreateRepairModal({ onClose }) {
   const { currentUser } = useAuth();
   const { tools, sites, addRepair } = useApp();
-  const [form, setForm] = useState({ toolId: '', issue: '', responsibleSiteId: currentUser.siteId, cost: '', technician: '', notes: '' });
+  const [form, setForm] = useState({ toolId: '', issue: '', responsibleSiteId: currentUser.siteId || 'HQ', cost: '', technician: '', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const brokenTools = tools.filter(t => ['Broken', 'In-Use'].includes(t.status));
+  const uid = currentUser?.uid || currentUser?.id;
+  const displayName = currentUser?.name || currentUser?.email || '';
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.toolId || !form.issue) return;
-    const tool = tools.find(t => t.id === form.toolId);
-    addRepair({
-      id: `REP-${Date.now()}`,
-      toolId: form.toolId,
-      toolName: tool?.name || form.toolId,
-      issue: form.issue,
-      reportedBy: currentUser.id,
-      reportedByName: currentUser.name,
-      reportedAt: new Date().toISOString().split('T')[0],
-      responsibleSiteId: form.responsibleSiteId,
-      ownerSiteId: tool?.ownerSiteId || 'HQ',
-      cost: parseFloat(form.cost) || 0,
-      technician: form.technician || null,
-      status: 'Pending',
-      completedAt: null,
-      notes: form.notes,
-      isBorrowedBreakage: tool?.borrowedBySiteId ? true : false,
-    });
-    onClose();
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const tool = tools.find(t => t.id === form.toolId);
+      await addRepair({
+        id: uniqueId('REP-'),
+        toolId: form.toolId,
+        toolName: tool?.name || form.toolId,
+        issue: form.issue,
+        reportedBy: uid || '',
+        reportedByName: displayName,
+        reportedAt: new Date().toISOString().split('T')[0],
+        responsibleSiteId: form.responsibleSiteId || currentUser?.siteId || 'HQ',
+        ownerSiteId: tool?.ownerSiteId || 'HQ',
+        cost: parseFloat(form.cost) || 0,
+        technician: form.technician || null,
+        status: 'Pending',
+        completedAt: null,
+        notes: form.notes || '',
+        isBorrowedBreakage: tool?.borrowedBySiteId ? true : false,
+      });
+      onClose();
+    } catch (err) {
+      console.error('[Repairs] addRepair failed:', err);
+      setSubmitError(err?.message || 'บันทึกไม่สำเร็จ กรุณาตรวจสอบสิทธิ์หรือเครือข่าย');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -304,9 +318,17 @@ function CreateRepairModal({ onClose }) {
         <Input label="Technician / Vendor" value={form.technician} onChange={e => setForm(f => ({ ...f, technician: e.target.value }))} placeholder="Name or company" />
       </div>
       <Textarea label="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
+      {submitError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">
+          {submitError}
+        </div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={!form.toolId || !form.issue}><Plus size={15} /> Log Repair</Button>
+        <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button onClick={handleSubmit} disabled={!form.toolId || !form.issue || submitting}>
+          {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={15} />}
+          {submitting ? 'กำลังบันทึก...' : 'Log Repair'}
+        </Button>
       </div>
     </div>
   );

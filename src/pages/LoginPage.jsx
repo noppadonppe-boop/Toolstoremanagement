@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { HardHat, Eye, EyeOff, LogIn, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { loginWithEmail, loginWithGoogle } from '../services/authService';
+import { auth } from '../firebase';
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
@@ -14,7 +15,7 @@ const GoogleIcon = () => (
 );
 
 export default function LoginPage() {
-  const { firebaseUser, userProfile, setError: setAuthError, setProfileFromLogin } = useAuth();
+  const { firebaseUser, userProfile, setAuthStateFromLogin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from     = location.state?.from?.pathname || '/';
@@ -40,7 +41,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const profile = await loginWithEmail(email, password);
-      setProfileFromLogin(profile);
+      setAuthStateFromLogin(auth.currentUser, profile);
       if (profile?.status === 'rejected') setLocalError('บัญชีของคุณถูกปฏิเสธ กรุณาติดต่อผู้ดูแลระบบ');
     } catch (err) {
       const msg = {
@@ -60,7 +61,7 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const profile = await loginWithGoogle();
-      setProfileFromLogin(profile);
+      setAuthStateFromLogin(auth.currentUser, profile);
       if (profile?.status === 'rejected') setLocalError('บัญชีของคุณถูกปฏิเสธ กรุณาติดต่อผู้ดูแลระบบ');
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {

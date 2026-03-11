@@ -83,8 +83,12 @@ export default function Sidebar({ open, onClose }) {
         {currentUser && (
           <div className="mx-4 mt-4 p-3 bg-slate-800 rounded-xl">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold shrink-0">
-                {currentUser.avatar}
+              <div className={clsx('w-9 h-9 rounded-full flex items-center justify-center overflow-hidden shrink-0', typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? 'bg-slate-700' : 'bg-blue-500 text-xs font-bold')}>
+                {typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? (
+                  <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  currentUser.avatar
+                )}
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{currentUser.name}</p>
@@ -132,6 +136,7 @@ export default function Sidebar({ open, onClose }) {
         {/* Footer */}
         <div className="px-4 py-3 border-t border-slate-700/50">
           <p className="text-xs text-slate-500 text-center">v1.0.0 · Construction ERP</p>
+          <p className="text-[10px] text-slate-600 text-center mt-1">อัปเดตแบบเรียลไทม์</p>
         </div>
       </aside>
     </>

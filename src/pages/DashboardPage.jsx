@@ -12,10 +12,10 @@ import Badge from '../components/ui/Badge';
 const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#f97316', '#94a3b8'];
 
 export default function DashboardPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { tools, repairs, writeOffRequests, requests, sites, getStats, getTotalRepairCost } = useApp();
 
-  const isGlobal = ['MD', 'Admin', 'ProcurementManager', 'StoreMain'].includes(currentUser.role);
+  const isGlobal = hasAnyRole(['MD', 'Admin', 'ProcurementManager', 'StoreMain']);
   const siteId = isGlobal ? null : currentUser.siteId;
 
   const stats = useMemo(() => getStats(siteId), [tools, siteId]);
@@ -57,7 +57,7 @@ export default function DashboardPage() {
           </div>
           <div className="hidden sm:flex items-center gap-2 bg-white/20 rounded-xl px-4 py-2">
             <Activity size={18} />
-            <span className="text-sm font-medium">{currentUser.role}</span>
+            <span className="text-sm font-medium">{(currentUser.roles || [currentUser.role]).join(', ')}</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
@@ -81,7 +81,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Procurement Manager special view */}
-      {currentUser.role === 'ProcurementManager' && pendingWO.length > 0 && (
+      {hasAnyRole(['ProcurementManager']) && pendingWO.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle size={20} className="text-orange-600" />

@@ -5,7 +5,7 @@ import { auth, db } from '../firebase';
 import { isSessionExpired, getRemainingMinutes } from '../services/sessionService';
 import { logout as authServiceLogout } from '../services/authService';
 
-const COLL = 'CMG-Tool-Store-Management';
+const COLL = 'CMG Tool Store Management';
 const ROOT = 'root';
 
 const AuthContext = createContext(null);
@@ -28,17 +28,19 @@ export const ROLE_PERMISSIONS = {
 };
 
 // Adapt Firestore profile to shape expected by existing Topbar / Sidebar
-function adaptProfile(profile) {
+// authPhotoURL = รูปจาก Firebase Auth (Google) — ใช้ถ้ามี จะได้แสดงรูปบัญชี Google
+function adaptProfile(profile, authPhotoURL = null) {
   if (!profile) return null;
   const roles = Array.isArray(profile.role) ? profile.role : (profile.role ? [profile.role] : ['Supervisor']);
   const primaryRole = roles[0] || 'Supervisor';
   const initials = [profile.firstName?.[0], profile.lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?';
+  const photoURL = authPhotoURL || profile.photoURL || null;
   return {
     ...profile,
     name:   `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || profile.email,
-    role:   primaryRole,  // backward-compat single string
-    roles,                // full array
-    avatar: initials,
+    role:   primaryRole,
+    roles,
+    avatar: photoURL || initials,  // URL = แสดงรูป Google, ไม่ใช่ = ตัวอักษรย่อ
     siteId: profile.assignedProjects?.[0] || 'HQ',
   };
 }
@@ -65,12 +67,21 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async () => {
     if (!auth.currentUser) return;
     const profile = await fetchProfile(auth.currentUser.uid);
-    setUserProfile(adaptProfile(profile));
+    setUserProfile(adaptProfile(profile, auth.currentUser.photoURL || null));
   }, [fetchProfile]);
 
   // ── Set profile from login result (avoids Firestore read delay / race) ───
   const setProfileFromLogin = useCallback((profile) => {
-    if (profile) setUserProfile(adaptProfile(profile));
+    if (profile) setUserProfile(adaptProfile(profile, auth.currentUser?.photoURL || null));
+  }, []);
+
+  // ตั้งทั้ง firebaseUser + profile จากผลล็อกอินเลย เพื่อให้ redirect ทำงานกดครั้งเดียว (ไม่ต้องรอ onAuthStateChanged)
+  const setAuthStateFromLogin = useCallback((fbUser, profile) => {
+    if (fbUser) setFirebaseUser(fbUser);
+    if (profile) setUserProfile(adaptProfile(profile, fbUser?.photoURL || null));
+    // สำคัญ: ปิด loading ทันที ไม่ต้องรอ onAuthStateChanged
+    setSessionMinutesLeft(getRemainingMinutes());
+    setLoading(false);
   }, []);
 
   // ── Main auth state listener ──────────────────────────────────────────────
@@ -106,7 +117,7 @@ export function AuthProvider({ children }) {
         if (auth.currentUser?.uid !== fbUser.uid) return;
         const profile = await fetchProfile(fbUser.uid);
         if (auth.currentUser?.uid !== fbUser.uid) return;
-        if (profile) setUserProfile(adaptProfile(profile));
+        if (profile) setUserProfile(adaptProfile(profile, fbUser.photoURL || null));
         // If null, never set — leave profile from setProfileFromLogin() if any
       }, 200);
     });
@@ -144,10 +155,19 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Permission helpers ────────────────────────────────────────────────────
+  /** มีสิทธิ์เข้าถึง module ใดๆ ตาม roles ที่มี (ถ้ามีหลาย role จะได้สิทธิ์รวมทุก role) */
   const hasPermission = useCallback((module) => {
     if (!userProfile) return false;
     const roles = userProfile.roles || [userProfile.role];
     return roles.some(r => ROLE_PERMISSIONS[r]?.includes(module));
+  }, [userProfile]);
+
+  /** มีบทบาทอย่างน้อยหนึ่งใน allowedRoles (สำหรับตรวจ action เช่น อนุมัติ, สร้าง, จัดส่ง) */
+  const hasAnyRole = useCallback((allowedRoles) => {
+    if (!userProfile || !Array.isArray(allowedRoles) || allowedRoles.length === 0) return false;
+    const roles = userProfile.roles || [userProfile.role];
+    const normalized = Array.isArray(roles) ? roles : [roles];
+    return normalized.some(r => allowedRoles.includes(r));
   }, [userProfile]);
 
   const canManageSite = useCallback((siteId) => {
@@ -167,8 +187,10 @@ export function AuthProvider({ children }) {
       error, setError,
       refreshProfile,
       setProfileFromLogin,
+      setAuthStateFromLogin,
       logout,
       hasPermission,
+      hasAnyRole,
       canManageSite,
     }}>
       {children}

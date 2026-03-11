@@ -8,19 +8,20 @@ import Modal from '../components/ui/Modal';
 import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import { Select, Textarea } from '../components/ui/Input';
 import EmptyState from '../components/ui/EmptyState';
+import { uniqueId } from '../utils/ids';
 
 export default function BorrowPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { requests, tools, sites, repairs, approveRequest, rejectRequest, completeDispatch, returnBorrowedTool, addRequest } = useApp();
   const [showCreate, setShowCreate] = useState(false);
   const [showReturn, setShowReturn] = useState(null); // { req }
 
-  const canApprove = ['PM', 'MD', 'Admin', 'StoreMain'].includes(currentUser.role);
-  const canCreate = ['PM', 'CM', 'MD', 'Admin', 'StoreSite', 'StoreMain'].includes(currentUser.role);
+  const canApprove = hasAnyRole(['PM', 'MD', 'Admin', 'StoreMain']);
+  const canCreate = hasAnyRole(['PM', 'CM', 'MD', 'Admin', 'StoreSite', 'StoreMain']);
 
   const borrowRequests = requests.filter(r =>
     r.type === 'InterSiteBorrow' &&
-    (['MD', 'Admin', 'StoreMain', 'ProcurementManager'].includes(currentUser.role) ||
+    (hasAnyRole(['MD', 'Admin', 'StoreMain', 'ProcurementManager']) ||
       r.fromSiteId === currentUser.siteId || r.toSiteId === currentUser.siteId)
   );
 
@@ -209,14 +210,16 @@ export default function BorrowPage() {
 }
 
 function CreateBorrowModal({ onClose }) {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, addRequest } = useApp();
   const [form, setForm] = useState({
-    fromSiteId: currentUser.siteId,
+    fromSiteId: currentUser?.siteId || 'HQ',
     toSiteId: 'SITE-B',
     selectedTools: [],
     notes: '',
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const lenderTools = tools.filter(t =>
     t.currentStoreId === form.toSiteId &&
@@ -233,26 +236,35 @@ function CreateBorrowModal({ onClose }) {
     }));
   };
 
-  const handleSubmit = () => {
-    if (form.selectedTools.length === 0 || form.fromSiteId === form.toSiteId) return;
-    const newReq = {
-      id: `REQ-${Date.now()}`,
-      type: 'InterSiteBorrow',
-      fromSiteId: form.fromSiteId,
-      toSiteId: form.toSiteId,
-      items: form.selectedTools.map(id => {
-        const t = tools.find(x => x.id === id);
-        return { toolId: id, toolName: t?.name || id };
-      }),
-      requestedBy: currentUser.id,
-      requestedByName: currentUser.name,
-      status: 'Pending',
-      createdAt: new Date().toISOString().split('T')[0],
-      approvedAt: null, approvedBy: null, completedAt: null,
-      notes: form.notes,
-    };
-    addRequest(newReq);
-    onClose();
+  const handleSubmit = async () => {
+    if (form.selectedTools.length === 0 || form.fromSiteId === form.toSiteId || submitting) return;
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const newReq = {
+        id: uniqueId('REQ-'),
+        type: 'InterSiteBorrow',
+        fromSiteId: form.fromSiteId,
+        toSiteId: form.toSiteId,
+        items: form.selectedTools.map(id => {
+          const t = tools.find(x => x.id === id);
+          return { toolId: id, toolName: t?.name || id };
+        }),
+        requestedBy: currentUser?.uid || currentUser?.id || '',
+        requestedByName: currentUser?.name || '',
+        status: 'Pending',
+        createdAt: new Date().toISOString().split('T')[0],
+        approvedAt: null, approvedBy: null, completedAt: null,
+        notes: form.notes,
+      };
+      await addRequest(newReq);
+      onClose();
+    } catch (err) {
+      console.error('[Borrow] addRequest failed:', err);
+      setSubmitError(err?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -297,10 +309,13 @@ function CreateBorrowModal({ onClose }) {
 
       <Textarea label="Purpose / Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Reason for borrowing..." rows={2} />
 
+      {submitError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">{submitError}</div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={form.selectedTools.length === 0 || form.fromSiteId === form.toSiteId}>
-          <Plus size={16} /> Submit Borrow Request ({form.selectedTools.length} tools)
+        <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button onClick={handleSubmit} disabled={form.selectedTools.length === 0 || form.fromSiteId === form.toSiteId || submitting}>
+          {submitting ? 'กำลังบันทึก...' : <><Plus size={16} /> Submit Borrow Request ({form.selectedTools.length} tools)</>}
         </Button>
       </div>
     </div>

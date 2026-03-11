@@ -81,8 +81,12 @@ export default function Topbar({ onMenuClick, pageTitle }) {
               onClick={() => { setShowProfile(s => !s); setShowNotif(false); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors"
             >
-              <div className={clsx('w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center', roleColors[currentUser.role] || 'bg-slate-500')}>
-                {currentUser.avatar}
+              <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center overflow-hidden shrink-0', typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? 'bg-slate-100' : 'text-white text-xs font-bold ' + (roleColors[currentUser.role] || 'bg-slate-500'))}>
+                {typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? (
+                  <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  currentUser.avatar
+                )}
               </div>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-semibold text-slate-700 leading-tight">{currentUser.name}</p>
@@ -92,9 +96,18 @@ export default function Topbar({ onMenuClick, pageTitle }) {
             </button>
             {showProfile && (
               <div className="absolute right-0 top-12 w-52 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <p className="text-sm font-semibold text-slate-700">{currentUser.name}</p>
-                  <p className="text-xs text-slate-400">{(currentUser.roles || [currentUser.role]).join(', ')} · {currentUser.siteId}</p>
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                  <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center overflow-hidden shrink-0', typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? 'bg-slate-100' : 'text-white text-sm font-bold ' + (roleColors[currentUser.role] || 'bg-slate-500'))}>
+                    {typeof currentUser.avatar === 'string' && currentUser.avatar.startsWith('http') ? (
+                      <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      currentUser.avatar
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-700">{currentUser.name}</p>
+                    <p className="text-xs text-slate-400">{(currentUser.roles || [currentUser.role]).join(', ')} · {currentUser.siteId}</p>
+                  </div>
                 </div>
                 <button
                   onClick={logout}

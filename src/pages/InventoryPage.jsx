@@ -9,11 +9,12 @@ import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import Input, { Select } from '../components/ui/Input';
 import EmptyState from '../components/ui/EmptyState';
 import QRCodeBox from '../components/QRCodeBox';
+import { uniqueId } from '../utils/ids';
 
 const STATUS_OPTIONS = ['All', 'Available', 'In-Use', 'Broken', 'In-Repair', 'Lost', 'Written-Off'];
 
 export default function InventoryPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, categories, addTools } = useApp();
 
   const [search, setSearch] = useState('');
@@ -26,7 +27,7 @@ export default function InventoryPage() {
   const [printTools, setPrintTools] = useState([]);
   const printRef = useRef();
 
-  const canAdd = ['StoreMain', 'Admin', 'MD'].includes(currentUser.role);
+  const canAdd = hasAnyRole(['StoreMain', 'Admin', 'MD']);
 
   const filtered = tools.filter(t => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -159,7 +160,7 @@ export default function InventoryPage() {
 
       {/* Bulk Add Modal */}
       <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Bulk Add New Tools" size="lg">
-        <BulkAddModal onClose={() => setShowAddModal(false)} onAdd={(newTools) => { addTools(newTools); setShowAddModal(false); openPrintQR(newTools); }} />
+        <BulkAddModal onClose={() => setShowAddModal(false)} onAdd={async (newTools) => { await addTools(newTools); setShowAddModal(false); openPrintQR(newTools); }} />
       </Modal>
 
       {/* QR Print Modal */}
@@ -245,6 +246,8 @@ function BulkAddModal({ onClose, onAdd }) {
     quantity: 1, targetSiteId: 'HQ', serialPrefix: '',
   });
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const validate = () => {
     const e = {};
@@ -255,32 +258,42 @@ function BulkAddModal({ onClose, onAdd }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
-    const now = Date.now();
-    const prefix = form.serialPrefix || form.name.replace(/\s+/g, '').toUpperCase().slice(0, 4);
-    const year = new Date().getFullYear();
-    const newTools = Array.from({ length: parseInt(form.quantity) }, (_, i) => {
-      const idx = String(now + i).slice(-4);
-      const id = `T${now + i}`;
-      return {
-        id,
-        name: form.name,
-        category: form.category,
-        qrCode: `QR-${id}`,
-        currentStoreId: form.targetSiteId,
-        ownerSiteId: form.targetSiteId,
-        status: 'Available',
-        serialNo: `${prefix}-${year}-${idx}`,
-        brand: form.brand,
-        unitValue: parseInt(form.unitValue),
-        repairHistory: [],
-        writeOffDetails: null,
-        borrowedBySiteId: null,
-      };
-    });
-    onAdd(newTools);
+    if (submitting) return;
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const baseId = uniqueId('T');
+      const prefix = form.serialPrefix || form.name.replace(/\s+/g, '').toUpperCase().slice(0, 4);
+      const year = new Date().getFullYear();
+      const newTools = Array.from({ length: parseInt(form.quantity) }, (_, i) => {
+        const id = `${baseId}-${i}`;
+        return {
+          id,
+          name: form.name,
+          category: form.category,
+          qrCode: `QR-${id}`,
+          currentStoreId: form.targetSiteId,
+          ownerSiteId: form.targetSiteId,
+          status: 'Available',
+          serialNo: `${prefix}-${year}-${String(i).padStart(4, '0')}`,
+          brand: form.brand,
+          unitValue: parseInt(form.unitValue),
+          repairHistory: [],
+          writeOffDetails: null,
+          borrowedBySiteId: null,
+        };
+      });
+      await onAdd(newTools);
+      onClose();
+    } catch (err) {
+      console.error('[Inventory] addTools failed:', err);
+      setSubmitError(err?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -304,9 +317,14 @@ function BulkAddModal({ onClose, onAdd }) {
       <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-600 border border-slate-200">
         <strong>Preview:</strong> Will create <strong>{form.quantity}</strong> tools named "<strong>{form.name || '...'}</strong>" assigned to <strong>{form.targetSiteId}</strong> with auto-generated QR codes.
       </div>
+      {submitError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">{submitError}</div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit}><Plus size={16} /> Add {form.quantity} Tool{form.quantity > 1 ? 's' : ''} & Print QR</Button>
+        <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button onClick={handleSubmit} disabled={submitting}>
+          {submitting ? 'กำลังบันทึก...' : <><Plus size={16} /> Add {form.quantity} Tool{form.quantity > 1 ? 's' : ''} & Print QR</>}
+        </Button>
       </div>
     </div>
   );

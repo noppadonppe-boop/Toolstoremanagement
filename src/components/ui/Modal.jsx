@@ -1,6 +1,10 @@
 import { X } from 'lucide-react';
 import { clsx } from 'clsx';
 
+/**
+ * Modal ที่เมื่อ open แล้วจะไม่ unmount เนื้อหาเมื่อ parent re-render (เช่น ข้อมูลจาก Firestore อัปเดต)
+ * จึงช่วยให้ state ในฟอร์ม (ที่กำลังกรอก) ไม่หายเมื่อมีคนอื่นบันทึกข้อมูล
+ */
 export default function Modal({ open, onClose, title, children, size = 'md', className }) {
   if (!open) return null;
   const widths = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'max-w-6xl' };

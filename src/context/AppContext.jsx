@@ -9,7 +9,7 @@ import {
 } from './mockData';
 
 // ── Firestore path helpers ────────────────────────────────────────────────────
-const COLL = 'CMG-Tool-Store-Management';
+const COLL = 'CMG Tool Store Management';
 const ROOT = 'root';
 
 const toolsCol    = () => collection(db, COLL, ROOT, 'tools');
@@ -38,7 +38,16 @@ async function seedIfEmpty() {
   INITIAL_REPAIRS.forEach(r => batch.set(repairDoc(r.id), r));
   INITIAL_WRITEOFF_REQUESTS.forEach(w => batch.set(writeoffDoc(w.id), w));
   SITES.forEach(s => batch.set(doc(db, COLL, ROOT, 'sites', s.id), s));
-  USERS.forEach(u => batch.set(doc(db, COLL, ROOT, 'users', u.id), u));
+  // Mock users สำหรับแสดงชื่อใน requests/repairs (ไม่เก็บ password)
+  USERS.forEach(u => {
+    const { password, ...rest } = u;
+    batch.set(doc(db, COLL, ROOT, 'users', u.id), {
+      ...rest,
+      uid: u.id,
+      status: 'approved',
+      role: Array.isArray(u.role) ? u.role : [u.role],
+    });
+  });
 
   await batch.commit();
   console.log('[CMG] Seeding complete.');

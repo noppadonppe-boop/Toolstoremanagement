@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal';
 import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import Input, { Select, Textarea } from '../components/ui/Input';
 import EmptyState from '../components/ui/EmptyState';
+import { uniqueId } from '../utils/ids';
 
 const TYPE_LABELS = {
   ProjectSetup: { label: 'Project Setup (HQ→Site)', color: 'bg-blue-50 text-blue-700 border-blue-100' },
@@ -17,22 +18,22 @@ const TYPE_LABELS = {
 };
 
 export default function RequisitionsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { requests, sites, tools, approveRequest, rejectRequest, completeDispatch, addRequest } = useApp();
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const canApprove = ['PM', 'MD', 'Admin', 'StoreMain'].includes(currentUser.role);
-  const canDispatch = ['StoreMain', 'StoreSite', 'Admin', 'MD'].includes(currentUser.role);
-  const canCreate = ['CM', 'PM', 'StoreMain', 'StoreSite', 'Admin', 'MD'].includes(currentUser.role);
+  const canApprove = hasAnyRole(['PM', 'MD', 'Admin', 'StoreMain']);
+  const canDispatch = hasAnyRole(['StoreMain', 'StoreSite', 'Admin', 'MD']);
+  const canCreate = hasAnyRole(['CM', 'PM', 'StoreMain', 'StoreSite', 'Admin', 'MD']);
 
   const filtered = requests.filter(r => {
     const matchType = typeFilter === 'All' || r.type === typeFilter;
     const matchStatus = statusFilter === 'All' || r.status === statusFilter;
     // Site-scoped visibility
-    const isMine = ['MD', 'Admin', 'StoreMain', 'ProcurementManager'].includes(currentUser.role) ||
+    const isMine = hasAnyRole(['MD', 'Admin', 'StoreMain', 'ProcurementManager']) ||
       r.fromSiteId === currentUser.siteId || r.toSiteId === currentUser.siteId ||
       r.requestedBy === currentUser.id;
     return matchType && matchStatus && isMine;
@@ -200,15 +201,17 @@ function RequisitionDetail({ req, sites, tools: allTools }) {
 }
 
 function CreateRequisitionModal({ onClose }) {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, addRequest } = useApp();
   const [form, setForm] = useState({
     type: 'ProjectSetup',
-    fromSiteId: currentUser.siteId,
+    fromSiteId: currentUser?.siteId || 'HQ',
     toSiteId: 'SITE-A',
     selectedTools: [],
     notes: '',
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const availableTools = tools.filter(t => {
     if (form.type === 'ProjectSetup') return t.currentStoreId === 'HQ' && t.status === 'Available';
@@ -227,26 +230,35 @@ function CreateRequisitionModal({ onClose }) {
     }));
   };
 
-  const handleSubmit = () => {
-    if (form.selectedTools.length === 0) return;
-    const newReq = {
-      id: `REQ-${Date.now()}`,
-      type: form.type,
-      fromSiteId: form.type === 'DailyBooking' ? null : form.fromSiteId,
-      toSiteId: form.type === 'DailyBooking' ? currentUser.siteId : form.toSiteId,
-      items: form.selectedTools.map(id => {
-        const t = tools.find(x => x.id === id);
-        return { toolId: id, toolName: t?.name || id };
-      }),
-      requestedBy: currentUser.id,
-      requestedByName: currentUser.name,
-      status: 'Pending',
-      createdAt: new Date().toISOString().split('T')[0],
-      approvedAt: null, approvedBy: null, completedAt: null,
-      notes: form.notes,
-    };
-    addRequest(newReq);
-    onClose();
+  const handleSubmit = async () => {
+    if (form.selectedTools.length === 0 || submitting) return;
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const newReq = {
+        id: uniqueId('REQ-'),
+        type: form.type,
+        fromSiteId: form.type === 'DailyBooking' ? null : form.fromSiteId,
+        toSiteId: form.type === 'DailyBooking' ? (currentUser?.siteId || 'HQ') : form.toSiteId,
+        items: form.selectedTools.map(id => {
+          const t = tools.find(x => x.id === id);
+          return { toolId: id, toolName: t?.name || id };
+        }),
+        requestedBy: currentUser?.uid || currentUser?.id || '',
+        requestedByName: currentUser?.name || '',
+        status: 'Pending',
+        createdAt: new Date().toISOString().split('T')[0],
+        approvedAt: null, approvedBy: null, completedAt: null,
+        notes: form.notes,
+      };
+      await addRequest(newReq);
+      onClose();
+    } catch (err) {
+      console.error('[Requisitions] addRequest failed:', err);
+      setSubmitError(err?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -298,10 +310,13 @@ function CreateRequisitionModal({ onClose }) {
 
       <Textarea label="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." rows={2} />
 
+      {submitError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">{submitError}</div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={form.selectedTools.length === 0}>
-          <Plus size={16} /> Submit Requisition ({form.selectedTools.length} tools)
+        <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button onClick={handleSubmit} disabled={form.selectedTools.length === 0 || submitting}>
+          {submitting ? 'กำลังบันทึก...' : <><Plus size={16} /> Submit Requisition ({form.selectedTools.length} tools)</>}
         </Button>
       </div>
     </div>

@@ -3,9 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { HardHat, Eye, EyeOff, UserPlus, Mail, User, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { registerWithEmail } from '../services/authService';
+import { auth } from '../firebase';
 
 export default function RegisterPage() {
-  const { userProfile, setProfileFromLogin } = useAuth();
+  const { userProfile, setAuthStateFromLogin } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -42,7 +43,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const profile = await registerWithEmail(form.email, form.password, form.firstName, form.lastName, form.position);
-      setProfileFromLogin(profile);
+      setAuthStateFromLogin(auth.currentUser, profile);
       // redirect handled by useEffect above once userProfile updates
     } catch (err) {
       const msg = {

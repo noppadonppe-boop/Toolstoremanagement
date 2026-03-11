@@ -9,26 +9,26 @@ import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import EmptyState from '../components/ui/EmptyState';
 
 export default function BookingPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { requests, tools, sites, approveRequest, completeDispatch, returnTool } = useApp();
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [returnModal, setReturnModal] = useState(null); // { tool }
   const [scanMode, setScanMode] = useState('dispatch'); // 'dispatch' | 'return'
 
-  const isSupervisor = currentUser.role === 'Supervisor';
-  const isStoreSite = currentUser.role === 'StoreSite';
-  const canDispense = ['StoreSite', 'StoreMain', 'Admin', 'MD'].includes(currentUser.role);
+  const isSupervisor = hasAnyRole(['Supervisor']);
+  const isStoreSite = hasAnyRole(['StoreSite']);
+  const canDispense = hasAnyRole(['StoreSite', 'StoreMain', 'Admin', 'MD']);
 
   const siteId = currentUser.siteId;
 
   const bookingRequests = requests.filter(r =>
     r.type === 'DailyBooking' &&
-    (r.toSiteId === siteId || ['Admin', 'MD', 'StoreMain'].includes(currentUser.role))
+    (r.toSiteId === siteId || hasAnyRole(['Admin', 'MD', 'StoreMain']))
   );
 
   const inUseTools = tools.filter(t =>
     t.status === 'In-Use' &&
-    (t.currentStoreId === siteId || ['Admin', 'MD', 'StoreMain'].includes(currentUser.role))
+    (t.currentStoreId === siteId || hasAnyRole(['Admin', 'MD', 'StoreMain']))
   );
 
   return (

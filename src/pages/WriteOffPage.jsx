@@ -9,13 +9,13 @@ import { Table, Thead, Th, Tbody, Tr, Td } from '../components/ui/Table';
 import EmptyState from '../components/ui/EmptyState';
 
 export default function WriteOffPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasAnyRole } = useAuth();
   const { writeOffRequests, tools, sites, approveWriteOff, rejectWriteOff } = useApp();
   const [selected, setSelected] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const isProcurement = currentUser.role === 'ProcurementManager';
-  const canApprove = ['ProcurementManager', 'Admin', 'MD'].includes(currentUser.role);
+  const isProcurement = hasAnyRole(['ProcurementManager']);
+  const canApprove = hasAnyRole(['ProcurementManager', 'Admin', 'MD']);
 
   const visible = writeOffRequests.filter(w => {
     const matchStatus = statusFilter === 'All' || w.status === statusFilter;

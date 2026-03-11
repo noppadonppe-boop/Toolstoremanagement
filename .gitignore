@@ -1,4 +1,4 @@
-# Environment variables & secrets
+# Environment variables & secrets (อย่า commit .env — มี API key / ค่าลับ)
 .env
 .env.*
 !.env.example
