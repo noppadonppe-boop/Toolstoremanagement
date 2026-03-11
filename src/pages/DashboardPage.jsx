@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Package, Wrench, AlertTriangle, TrendingUp, MapPin,
   CheckCircle, Clock, XCircle, BarChart2, DollarSign, Activity
@@ -6,6 +6,8 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown } from '../components/ProjectSelector';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
 
@@ -14,12 +16,35 @@ const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#f97316', '#94a
 export default function DashboardPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { tools, repairs, writeOffRequests, requests, sites, getStats, getTotalRepairCost } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
+  const [filterProject, setFilterProject] = useState('all');
 
   const isGlobal = hasAnyRole(['MD', 'Admin', 'ProcurementManager', 'StoreMain']);
   const siteId = isGlobal ? null : currentUser.siteId;
 
-  const stats = useMemo(() => getStats(siteId), [tools, siteId]);
-  const totalRepairCost = useMemo(() => getTotalRepairCost(siteId), [repairs, siteId]);
+  const filteredTools = filterByProject(tools, filterProject);
+  const filteredRepairs = filterByProject(repairs, filterProject);
+  const filteredRequests = filterByProject(requests, filterProject);
+  const filteredWriteOffs = filterByProject(writeOffRequests, filterProject);
+
+  const stats = useMemo(() => {
+    const ft = siteId ? filteredTools.filter(t => t.currentStoreId === siteId) : filteredTools;
+    const active = ft.filter(t => t.status !== 'Written-Off');
+    return {
+      total: active.length,
+      available: active.filter(t => t.status === 'Available').length,
+      inUse: active.filter(t => t.status === 'In-Use').length,
+      broken: active.filter(t => t.status === 'Broken').length,
+      inRepair: active.filter(t => t.status === 'In-Repair').length,
+      lost: active.filter(t => t.status === 'Lost').length,
+      writtenOff: ft.filter(t => t.status === 'Written-Off').length,
+      totalValue: active.reduce((s, t) => s + (t.unitValue || 0), 0),
+    };
+  }, [filteredTools, siteId]);
+  const totalRepairCost = useMemo(() => {
+    const fr = siteId ? filteredRepairs.filter(r => r.responsibleSiteId === siteId) : filteredRepairs;
+    return fr.reduce((s, r) => s + (r.cost || 0), 0);
+  }, [filteredRepairs, siteId]);
 
   const pieData = [
     { name: 'Available', value: stats.available },
@@ -38,9 +63,9 @@ export default function DashboardPage() {
     });
   }, [tools, repairs]);
 
-  const pendingWO = writeOffRequests.filter(w => w.status === 'Pending');
-  const pendingReqs = requests.filter(r => r.status === 'Pending');
-  const recentRepairs = repairs.slice(0, 5);
+  const pendingWO = filteredWriteOffs.filter(w => w.status === 'Pending');
+  const pendingReqs = filteredRequests.filter(r => r.status === 'Pending');
+  const recentRepairs = filteredRepairs.slice(0, 5);
 
   const brokenPct = stats.total > 0 ? (((stats.broken + stats.inRepair) / stats.total) * 100).toFixed(1) : 0;
 
@@ -55,9 +80,12 @@ export default function DashboardPage() {
               {isGlobal ? 'Global overview across all sites' : `Site view: ${currentUser.siteId}`}
             </p>
           </div>
-          <div className="hidden sm:flex items-center gap-2 bg-white/20 rounded-xl px-4 py-2">
-            <Activity size={18} />
-            <span className="text-sm font-medium">{(currentUser.roles || [currentUser.role]).join(', ')}</span>
+          <div className="hidden sm:flex items-center gap-3">
+            <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
+            <div className="flex items-center gap-2 bg-white/20 rounded-xl px-4 py-2">
+              <Activity size={18} />
+              <span className="text-sm font-medium">{(currentUser.roles || [currentUser.role]).join(', ')}</span>
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">

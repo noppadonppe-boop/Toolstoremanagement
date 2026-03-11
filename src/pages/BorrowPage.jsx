@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Plus, ArrowLeftRight, CheckCircle, XCircle, ArrowRight, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown, ProjectFormSelect } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -13,13 +15,15 @@ import { uniqueId } from '../utils/ids';
 export default function BorrowPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { requests, tools, sites, repairs, approveRequest, rejectRequest, completeDispatch, returnBorrowedTool, addRequest } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
   const [showCreate, setShowCreate] = useState(false);
-  const [showReturn, setShowReturn] = useState(null); // { req }
+  const [showReturn, setShowReturn] = useState(null);
+  const [filterProject, setFilterProject] = useState('all');
 
   const canApprove = hasAnyRole(['PM', 'MD', 'Admin', 'StoreMain']);
   const canCreate = hasAnyRole(['PM', 'CM', 'MD', 'Admin', 'StoreSite', 'StoreMain']);
 
-  const borrowRequests = requests.filter(r =>
+  const borrowRequests = filterByProject(requests, filterProject).filter(r =>
     r.type === 'InterSiteBorrow' &&
     (hasAnyRole(['MD', 'Admin', 'StoreMain', 'ProcurementManager']) ||
       r.fromSiteId === currentUser.siteId || r.toSiteId === currentUser.siteId)
@@ -57,8 +61,11 @@ export default function BorrowPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-700">Inter-Site Borrow Requests ({borrowRequests.length})</h3>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-slate-700">Inter-Site Borrow Requests ({borrowRequests.length})</h3>
+          <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
+        </div>
         {canCreate && (
           <Button size="sm" onClick={() => setShowCreate(true)}>
             <Plus size={15} /> New Borrow Request
@@ -212,11 +219,13 @@ export default function BorrowPage() {
 function CreateBorrowModal({ onClose }) {
   const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, addRequest } = useApp();
+  const { availableProjects, defaultProjectId } = useProjectFilter();
   const [form, setForm] = useState({
     fromSiteId: currentUser?.siteId || 'HQ',
     toSiteId: 'SITE-B',
     selectedTools: [],
     notes: '',
+    projectId: defaultProjectId || '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -256,6 +265,7 @@ function CreateBorrowModal({ onClose }) {
         createdAt: new Date().toISOString().split('T')[0],
         approvedAt: null, approvedBy: null, completedAt: null,
         notes: form.notes,
+        projectId: form.projectId || null,
       };
       await addRequest(newReq);
       onClose();
@@ -306,6 +316,8 @@ function CreateBorrowModal({ onClose }) {
           ))}
         </div>
       </div>
+
+      <ProjectFormSelect projects={availableProjects} value={form.projectId} onChange={v => setForm(f => ({ ...f, projectId: v }))} label="โครงการ" />
 
       <Textarea label="Purpose / Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Reason for borrowing..." rows={2} />
 

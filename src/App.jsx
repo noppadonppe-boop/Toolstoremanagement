@@ -16,6 +16,7 @@ import BorrowPage           from './pages/BorrowPage';
 import RepairsPage          from './pages/RepairsPage';
 import WriteOffPage         from './pages/WriteOffPage';
 import AdminPanel           from './pages/AdminPanel';
+import ProjectsPage         from './pages/ProjectsPage';
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
 class ErrorBoundary extends Component {
@@ -53,6 +54,14 @@ function AppShell() {
           <Route path="borrow"       element={<BorrowPage />} />
           <Route path="repairs"      element={<RepairsPage />} />
           <Route path="writeoff"     element={<WriteOffPage />} />
+          <Route
+            path="projects"
+            element={
+              <ProtectedRoute requireRoles={['SuperAdmin', 'Admin']}>
+                <ProjectsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="admin"
             element={

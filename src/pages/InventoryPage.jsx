@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from 'react';
 import { Plus, Search, Printer, QrCode, Filter, Eye, ChevronDown, Package, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown, ProjectFormSelect } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -16,11 +18,13 @@ const STATUS_OPTIONS = ['All', 'Available', 'In-Use', 'Broken', 'In-Repair', 'Lo
 export default function InventoryPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, categories, addTools } = useApp();
+  const { availableProjects, filterByProject, defaultProjectId } = useProjectFilter();
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterSite, setFilterSite] = useState('All');
+  const [filterProject, setFilterProject] = useState('all');
   const [selectedTool, setSelectedTool] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -29,7 +33,7 @@ export default function InventoryPage() {
 
   const canAdd = hasAnyRole(['StoreMain', 'Admin', 'MD']);
 
-  const filtered = tools.filter(t => {
+  const filtered = filterByProject(tools, filterProject).filter(t => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.qrCode.toLowerCase().includes(search.toLowerCase()) ||
       t.serialNo?.toLowerCase().includes(search.toLowerCase());
@@ -75,6 +79,7 @@ export default function InventoryPage() {
           <option value="All">All Sites</option>
           {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
         <div className="flex items-center gap-2 ml-auto">
           <Button variant="outline" size="sm" onClick={() => openPrintQR(filtered)}>
             <Printer size={15} /> Print QR ({filtered.length})
@@ -160,7 +165,7 @@ export default function InventoryPage() {
 
       {/* Bulk Add Modal */}
       <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Bulk Add New Tools" size="lg">
-        <BulkAddModal onClose={() => setShowAddModal(false)} onAdd={async (newTools) => { await addTools(newTools); setShowAddModal(false); openPrintQR(newTools); }} />
+        <BulkAddModal onClose={() => setShowAddModal(false)} onAdd={async (newTools) => { await addTools(newTools); setShowAddModal(false); openPrintQR(newTools); }} defaultProjectId={defaultProjectId} />
       </Modal>
 
       {/* QR Print Modal */}
@@ -239,11 +244,12 @@ function ToolDetailModal({ tool, sites, onPrintQR }) {
   );
 }
 
-function BulkAddModal({ onClose, onAdd }) {
+function BulkAddModal({ onClose, onAdd, defaultProjectId }) {
   const { categories, sites } = useApp();
+  const { availableProjects } = useProjectFilter();
   const [form, setForm] = useState({
     name: '', category: categories[0], brand: '', unitValue: '',
-    quantity: 1, targetSiteId: 'HQ', serialPrefix: '',
+    quantity: 1, targetSiteId: 'HQ', serialPrefix: '', projectId: defaultProjectId || '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -284,6 +290,7 @@ function BulkAddModal({ onClose, onAdd }) {
           repairHistory: [],
           writeOffDetails: null,
           borrowedBySiteId: null,
+          projectId: form.projectId || null,
         };
       });
       await onAdd(newTools);
@@ -312,7 +319,13 @@ function BulkAddModal({ onClose, onAdd }) {
         <Select label="Assign to Site" value={form.targetSiteId} onChange={e => setForm(f => ({ ...f, targetSiteId: e.target.value }))}>
           {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </Select>
-        <Input label="Serial Prefix (optional)" value={form.serialPrefix} onChange={e => setForm(f => ({ ...f, serialPrefix: e.target.value }))} placeholder="e.g. AG" className="sm:col-span-2" />
+        <ProjectFormSelect
+          projects={availableProjects}
+          value={form.projectId}
+          onChange={v => setForm(f => ({ ...f, projectId: v }))}
+          label="โครงการ"
+        />
+        <Input label="Serial Prefix (optional)" value={form.serialPrefix} onChange={e => setForm(f => ({ ...f, serialPrefix: e.target.value }))} placeholder="e.g. AG" />
       </div>
       <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-600 border border-slate-200">
         <strong>Preview:</strong> Will create <strong>{form.quantity}</strong> tools named "<strong>{form.name || '...'}</strong>" assigned to <strong>{form.targetSiteId}</strong> with auto-generated QR codes.

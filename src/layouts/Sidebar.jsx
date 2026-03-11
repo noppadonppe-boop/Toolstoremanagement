@@ -3,12 +3,12 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Package, ClipboardList, CalendarCheck,
   ArrowLeftRight, Wrench, AlertTriangle, HardHat, ChevronRight,
-  X, Shield
+  X, Shield, FolderKanban
 } from 'lucide-react';
 import { useAuth, ROLE_PERMISSIONS } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 
-const ALL_NAV = [
+const MAIN_NAV = [
   { to: '/',             label: 'Dashboard',         icon: LayoutDashboard, module: 'dashboard' },
   { to: '/inventory',    label: 'Inventory',         icon: Package,         module: 'inventory' },
   { to: '/requisitions', label: 'Requisitions',      icon: ClipboardList,   module: 'requisitions' },
@@ -16,7 +16,11 @@ const ALL_NAV = [
   { to: '/borrow',       label: 'Inter-Site Borrow', icon: ArrowLeftRight,  module: 'borrow' },
   { to: '/repairs',      label: 'Repairs',           icon: Wrench,          module: 'repairs' },
   { to: '/writeoff',     label: 'Write-off',         icon: AlertTriangle,   module: 'writeoff' },
-  { to: '/admin',        label: 'Admin Panel',       icon: Shield,          module: 'admin' },
+];
+
+const ADMIN_NAV = [
+  { to: '/projects',    label: 'โครงการ',           icon: FolderKanban,    module: 'projects' },
+  { to: '/admin',       label: 'Admin Panel',       icon: Shield,          module: 'admin' },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -33,7 +37,8 @@ export default function Sidebar({ open, onClose }) {
     '/repairs': pendingRepairs,
   };
 
-  const navItems = ALL_NAV.filter(n => hasPermission(n.module));
+  const mainItems = MAIN_NAV.filter(n => hasPermission(n.module));
+  const adminItems = ADMIN_NAV.filter(n => hasPermission(n.module));
 
   const roleColors = {
     SuperAdmin: 'bg-violet-100 text-violet-700',
@@ -105,7 +110,7 @@ export default function Sidebar({ open, onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
-          {navItems.map(({ to, label, icon: Icon, module: mod }) => {
+          {mainItems.map(({ to, label, icon: Icon }) => {
             const badge = badges[to];
             return (
               <NavLink
@@ -131,6 +136,43 @@ export default function Sidebar({ open, onClose }) {
               </NavLink>
             );
           })}
+
+          {/* Admin section separator */}
+          {adminItems.length > 0 && (
+            <>
+              <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                <div className="flex-1 h-px bg-slate-700/60" />
+                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Admin</span>
+                <div className="flex-1 h-px bg-slate-700/60" />
+              </div>
+              {adminItems.map(({ to, label, icon: Icon }) => {
+                const badge = badges[to];
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/'}
+                    onClick={onClose}
+                    className={({ isActive }) => clsx(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors group',
+                      isActive
+                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    )}
+                  >
+                    <Icon size={18} className="shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {badge > 0 && (
+                      <span className="min-w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center px-1.5 font-bold">
+                        {badge}
+                      </span>
+                    )}
+                    <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 shrink-0" />
+                  </NavLink>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* Footer */}

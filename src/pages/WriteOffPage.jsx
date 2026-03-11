@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { AlertTriangle, CheckCircle, XCircle, Eye, FileX, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -11,13 +13,15 @@ import EmptyState from '../components/ui/EmptyState';
 export default function WriteOffPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { writeOffRequests, tools, sites, approveWriteOff, rejectWriteOff } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
   const [selected, setSelected] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [filterProject, setFilterProject] = useState('all');
 
   const isProcurement = hasAnyRole(['ProcurementManager']);
   const canApprove = hasAnyRole(['ProcurementManager', 'Admin', 'MD']);
 
-  const visible = writeOffRequests.filter(w => {
+  const visible = filterByProject(writeOffRequests, filterProject).filter(w => {
     const matchStatus = statusFilter === 'All' || w.status === statusFilter;
     const isMine = canApprove || w.siteId === currentUser.siteId || w.reportedBy === currentUser.id;
     return matchStatus && isMine;
@@ -78,7 +82,7 @@ export default function WriteOffPage() {
       )}
 
       {/* Filter */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="flex bg-white rounded-xl border border-slate-200 p-1 gap-1">
           {['All', 'Pending', 'Approved', 'Rejected'].map(s => (
             <button
@@ -90,6 +94,7 @@ export default function WriteOffPage() {
             </button>
           ))}
         </div>
+        <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
         <span className="text-sm text-slate-400">{visible.length} records</span>
       </div>
 

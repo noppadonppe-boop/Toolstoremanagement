@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
-  collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, getDocs,
+  collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, getDocs,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -12,15 +12,17 @@ import {
 const COLL = 'CMG Tool Store Management';
 const ROOT = 'root';
 
-const toolsCol    = () => collection(db, COLL, ROOT, 'tools');
-const requestsCol = () => collection(db, COLL, ROOT, 'requests');
-const repairsCol  = () => collection(db, COLL, ROOT, 'repairs');
-const writeoffsCol = () => collection(db, COLL, ROOT, 'writeoffs');
+const toolsCol      = () => collection(db, COLL, ROOT, 'tools');
+const requestsCol   = () => collection(db, COLL, ROOT, 'requests');
+const repairsCol    = () => collection(db, COLL, ROOT, 'repairs');
+const writeoffsCol  = () => collection(db, COLL, ROOT, 'writeoffs');
+const projectsCol   = () => collection(db, COLL, ROOT, 'projects');
 
-const toolDoc     = (id) => doc(db, COLL, ROOT, 'tools', id);
-const requestDoc  = (id) => doc(db, COLL, ROOT, 'requests', id);
-const repairDoc   = (id) => doc(db, COLL, ROOT, 'repairs', id);
-const writeoffDoc = (id) => doc(db, COLL, ROOT, 'writeoffs', id);
+const toolDoc       = (id) => doc(db, COLL, ROOT, 'tools', id);
+const requestDoc    = (id) => doc(db, COLL, ROOT, 'requests', id);
+const repairDoc     = (id) => doc(db, COLL, ROOT, 'repairs', id);
+const writeoffDoc   = (id) => doc(db, COLL, ROOT, 'writeoffs', id);
+const projectDoc    = (id) => doc(db, COLL, ROOT, 'projects', id);
 
 // ── Seed initial data if Firestore is empty ───────────────────────────────────
 async function seedIfEmpty() {
@@ -61,11 +63,12 @@ export function AppProvider({ children }) {
   const [requests, setRequests]             = useState([]);
   const [repairs, setRepairs]               = useState([]);
   const [writeOffRequests, setWriteOffRequests] = useState([]);
+  const [projects, setProjects]             = useState([]);
   const [loading, setLoading]               = useState(true);
   const [dbError, setDbError]               = useState(null);
 
   // Track which collections have delivered their first snapshot
-  const firstLoaded = useRef({ tools: false, requests: false, repairs: false, writeoffs: false });
+  const firstLoaded = useRef({ tools: false, requests: false, repairs: false, writeoffs: false, projects: false });
   const checkAllLoaded = () => {
     if (Object.values(firstLoaded.current).every(Boolean)) setLoading(false);
   };
@@ -93,6 +96,10 @@ export function AppProvider({ children }) {
           onSnapshot(writeoffsCol(), snap => {
             setWriteOffRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             if (!firstLoaded.current.writeoffs) { firstLoaded.current.writeoffs = true; checkAllLoaded(); }
+          }),
+          onSnapshot(projectsCol(), snap => {
+            setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            if (!firstLoaded.current.projects) { firstLoaded.current.projects = true; checkAllLoaded(); }
           }),
         );
       } catch (err) {
@@ -289,6 +296,19 @@ export function AppProvider({ children }) {
     await batch.commit();
   }, [requests, tools]);
 
+  // ── Projects CRUD ──────────────────────────────────────────────────────────
+  const addProject = useCallback(async (project) => {
+    await setDoc(projectDoc(project.id), project);
+  }, []);
+
+  const updateProject = useCallback(async (projectId, updates) => {
+    await updateDoc(projectDoc(projectId), updates);
+  }, []);
+
+  const deleteProject = useCallback(async (projectId) => {
+    await deleteDoc(projectDoc(projectId));
+  }, []);
+
   // ── Computed Stats ────────────────────────────────────────────────────────────
   const getStats = useCallback((siteId = null) => {
     const filtered = siteId ? tools.filter(t => t.currentStoreId === siteId) : tools;
@@ -335,7 +355,7 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      tools, requests, repairs, writeOffRequests,
+      tools, requests, repairs, writeOffRequests, projects,
       sites: SITES, users: USERS, categories: CATEGORIES,
       loading,
       addTools, updateTool,
@@ -343,6 +363,7 @@ export function AppProvider({ children }) {
       returnTool, returnBorrowedTool,
       addRepair, updateRepair, completeRepair,
       approveWriteOff, rejectWriteOff,
+      addProject, updateProject, deleteProject,
       getStats, getTotalRepairCost,
     }}>
       {children}

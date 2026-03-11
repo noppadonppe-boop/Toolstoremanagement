@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Wrench, Plus, CheckCircle, Clock, AlertTriangle, DollarSign } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown, ProjectFormSelect } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -19,14 +21,16 @@ const KANBAN_COLS = [
 export default function RepairsPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { repairs, tools, sites, addRepair, updateRepair, completeRepair } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
   const [view, setView] = useState('kanban');
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState(null);
   const [completeModal, setCompleteModal] = useState(null);
+  const [filterProject, setFilterProject] = useState('all');
 
   const canManage = hasAnyRole(['StoreSite', 'StoreMain', 'Admin', 'MD']);
 
-  const visibleRepairs = repairs.filter(r =>
+  const visibleRepairs = filterByProject(repairs, filterProject).filter(r =>
     hasAnyRole(['Admin', 'MD', 'StoreMain', 'ProcurementManager']) ||
     r.responsibleSiteId === currentUser.siteId || r.ownerSiteId === currentUser.siteId
   );
@@ -55,16 +59,19 @@ export default function RepairsPage() {
 
       {/* Controls */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex bg-white rounded-xl border border-slate-200 p-1 gap-1">
-          {['kanban', 'table'].map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${view === v ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              {v === 'kanban' ? '📋 Kanban' : '📊 Table'}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex bg-white rounded-xl border border-slate-200 p-1 gap-1">
+            {['kanban', 'table'].map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${view === v ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                {v === 'kanban' ? '📋 Kanban' : '📊 Table'}
+              </button>
+            ))}
+          </div>
+          <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
         </div>
         {canManage && (
           <Button size="sm" onClick={() => setShowCreate(true)}>
@@ -263,7 +270,8 @@ function RepairDetailModal({ repair, sites }) {
 function CreateRepairModal({ onClose }) {
   const { currentUser } = useAuth();
   const { tools, sites, addRepair } = useApp();
-  const [form, setForm] = useState({ toolId: '', issue: '', responsibleSiteId: currentUser.siteId || 'HQ', cost: '', technician: '', notes: '' });
+  const { availableProjects, defaultProjectId } = useProjectFilter();
+  const [form, setForm] = useState({ toolId: '', issue: '', responsibleSiteId: currentUser.siteId || 'HQ', cost: '', technician: '', notes: '', projectId: defaultProjectId || '' });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -293,6 +301,7 @@ function CreateRepairModal({ onClose }) {
         completedAt: null,
         notes: form.notes || '',
         isBorrowedBreakage: tool?.borrowedBySiteId ? true : false,
+        projectId: form.projectId || null,
       });
       onClose();
     } catch (err) {
@@ -317,6 +326,7 @@ function CreateRepairModal({ onClose }) {
         <Input label="Estimated Cost (฿)" type="number" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} placeholder="0" />
         <Input label="Technician / Vendor" value={form.technician} onChange={e => setForm(f => ({ ...f, technician: e.target.value }))} placeholder="Name or company" />
       </div>
+      <ProjectFormSelect projects={availableProjects} value={form.projectId} onChange={v => setForm(f => ({ ...f, projectId: v }))} label="โครงการ" />
       <Textarea label="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
       {submitError && (
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">

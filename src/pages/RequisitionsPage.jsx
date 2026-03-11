@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Plus, CheckCircle, XCircle, Truck, ArrowRight, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown, ProjectFormSelect } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -20,19 +22,20 @@ const TYPE_LABELS = {
 export default function RequisitionsPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { requests, sites, tools, approveRequest, rejectRequest, completeDispatch, addRequest } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [filterProject, setFilterProject] = useState('all');
 
   const canApprove = hasAnyRole(['PM', 'MD', 'Admin', 'StoreMain']);
   const canDispatch = hasAnyRole(['StoreMain', 'StoreSite', 'Admin', 'MD']);
   const canCreate = hasAnyRole(['CM', 'PM', 'StoreMain', 'StoreSite', 'Admin', 'MD']);
 
-  const filtered = requests.filter(r => {
+  const filtered = filterByProject(requests, filterProject).filter(r => {
     const matchType = typeFilter === 'All' || r.type === typeFilter;
     const matchStatus = statusFilter === 'All' || r.status === statusFilter;
-    // Site-scoped visibility
     const isMine = hasAnyRole(['MD', 'Admin', 'StoreMain', 'ProcurementManager']) ||
       r.fromSiteId === currentUser.siteId || r.toSiteId === currentUser.siteId ||
       r.requestedBy === currentUser.id;
@@ -51,6 +54,7 @@ export default function RequisitionsPage() {
           className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           {['All', 'Pending', 'Approved', 'Active', 'Completed', 'Rejected'].map(s => <option key={s}>{s}</option>)}
         </select>
+        <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
         <span className="text-sm text-slate-400 ml-1">{filtered.length} requests</span>
         {canCreate && (
           <Button size="sm" className="ml-auto" onClick={() => setShowCreate(true)}>
@@ -65,6 +69,7 @@ export default function RequisitionsPage() {
             <tr>
               <Th>Request ID</Th>
               <Th>Type</Th>
+              <Th>โครงการ</Th>
               <Th>Route</Th>
               <Th>Items</Th>
               <Th>Requested By</Th>
@@ -75,9 +80,10 @@ export default function RequisitionsPage() {
           </Thead>
           <Tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8}><EmptyState title="No requisitions found" /></td></tr>
+              <tr><td colSpan={9}><EmptyState title="No requisitions found" /></td></tr>
             ) : filtered.map(req => {
               const typeInfo = TYPE_LABELS[req.type] || { label: req.type, color: 'bg-slate-50 text-slate-600' };
+              const project = req.projectId ? availableProjects.find(p => p.id === req.projectId) : null;
               return (
                 <Tr key={req.id} onClick={() => setSelected(req)}>
                   <Td><span className="font-mono text-xs font-bold text-blue-600">{req.id}</span></Td>
@@ -85,6 +91,15 @@ export default function RequisitionsPage() {
                     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${typeInfo.color}`}>
                       {typeInfo.label}
                     </span>
+                  </Td>
+                  <Td>
+                    {project ? (
+                      <span className="text-xs bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                        {project.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1 text-xs text-slate-600">
@@ -203,12 +218,14 @@ function RequisitionDetail({ req, sites, tools: allTools }) {
 function CreateRequisitionModal({ onClose }) {
   const { currentUser, hasAnyRole } = useAuth();
   const { tools, sites, addRequest } = useApp();
+  const { availableProjects, defaultProjectId } = useProjectFilter();
   const [form, setForm] = useState({
     type: 'ProjectSetup',
     fromSiteId: currentUser?.siteId || 'HQ',
     toSiteId: 'SITE-A',
     selectedTools: [],
     notes: '',
+    projectId: defaultProjectId || '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -250,6 +267,7 @@ function CreateRequisitionModal({ onClose }) {
         createdAt: new Date().toISOString().split('T')[0],
         approvedAt: null, approvedBy: null, completedAt: null,
         notes: form.notes,
+        projectId: form.projectId || null,
       };
       await addRequest(newReq);
       onClose();
@@ -307,6 +325,8 @@ function CreateRequisitionModal({ onClose }) {
           ))}
         </div>
       </div>
+
+      <ProjectFormSelect projects={availableProjects} value={form.projectId} onChange={v => setForm(f => ({ ...f, projectId: v }))} label="โครงการ" />
 
       <Textarea label="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." rows={2} />
 

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { CalendarCheck, QrCode, CheckCircle, AlertTriangle, PackageX, Scan, ArrowRight, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useProjectFilter } from '../hooks/useProjectFilter';
+import { ProjectFilterDropdown } from '../components/ProjectSelector';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -11,9 +13,11 @@ import EmptyState from '../components/ui/EmptyState';
 export default function BookingPage() {
   const { currentUser, hasAnyRole } = useAuth();
   const { requests, tools, sites, approveRequest, completeDispatch, returnTool } = useApp();
+  const { availableProjects, filterByProject } = useProjectFilter();
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [returnModal, setReturnModal] = useState(null); // { tool }
-  const [scanMode, setScanMode] = useState('dispatch'); // 'dispatch' | 'return'
+  const [returnModal, setReturnModal] = useState(null);
+  const [scanMode, setScanMode] = useState('dispatch');
+  const [filterProject, setFilterProject] = useState('all');
 
   const isSupervisor = hasAnyRole(['Supervisor']);
   const isStoreSite = hasAnyRole(['StoreSite']);
@@ -21,12 +25,12 @@ export default function BookingPage() {
 
   const siteId = currentUser.siteId;
 
-  const bookingRequests = requests.filter(r =>
+  const bookingRequests = filterByProject(requests, filterProject).filter(r =>
     r.type === 'DailyBooking' &&
     (r.toSiteId === siteId || hasAnyRole(['Admin', 'MD', 'StoreMain']))
   );
 
-  const inUseTools = tools.filter(t =>
+  const inUseTools = filterByProject(tools, filterProject).filter(t =>
     t.status === 'In-Use' &&
     (t.currentStoreId === siteId || hasAnyRole(['Admin', 'MD', 'StoreMain']))
   );
@@ -65,7 +69,8 @@ export default function BookingPage() {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
+        <ProjectFilterDropdown projects={availableProjects} value={filterProject} onChange={setFilterProject} />
         {canDispense && (
           <Button onClick={() => { setScanMode('dispatch'); setShowQRScanner(true); }}>
             <Scan size={16} /> Scan QR to Dispatch
